@@ -62,7 +62,6 @@ const Chatbox = () => {
     }, 650);
   };
 
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -203,7 +202,8 @@ function MessageBubble({ message }: { message: Message }) {
         >
           <div className="flex items-start gap-2">
             <span className="flex-1 whitespace-pre-wrap">{message.text}</span>
-            <span className="shrink-0 opacity-60">❤️</span>
+            {/* show ❤️ only for user messages */}
+            {isUser && <span className="shrink-0 opacity-60">❤️</span>}
           </div>
           <div className="mt-1 text-[10px] opacity-60 text-right">
             {message.time}
