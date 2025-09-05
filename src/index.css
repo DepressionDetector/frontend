@@ -1,3 +1,55 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Neumorphism helpers */
+.neo-in {
+  box-shadow:
+    inset 6px 6px 12px rgba(0, 0, 0, 0.06),
+    inset -6px -6px 12px rgba(255, 255, 255, 0.9),
+    0 8px 18px rgba(31, 61, 71, 0.12);
+  backdrop-filter: blur(6px);
+}
+.neo-out {
+  box-shadow:
+    8px 8px 18px rgba(31, 61, 71, 0.18),
+    -6px -6px 14px rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+/* Speech bubble tails using ::after triangles */
+.bubble-tail-left::after,
+.bubble-tail-right::after {
+  content: "";
+  position: absolute;
+  bottom: 8px;
+  width: 0;
+  height: 0;
+  border: 10px solid transparent;
+  filter: drop-shadow(0 4px 6px rgba(31, 61, 71, 0.15));
+}
+
+/* assistant tail (points left) */
+.bubble-tail-left::after {
+  left: -2px;
+  border-right-color: rgba(255, 255, 255, 0.9);
+  border-left: 0;
+  margin-left: -8px;
+}
+
+/* user tail (points right) */
+.bubble-tail-right::after {
+  right: -2px;
+  border-left-color: rgba(159, 221, 226, 0.9); /* same as user bubble */
+  border-right: 0;
+  margin-right: -8px;
+}
+
+/* subtle pulse for sparkles */
+@keyframes pulse {
+  0%, 100% { opacity: .6; transform: scale(1) rotate(45deg); }
+  50% { opacity: 1; transform: scale(1.15) rotate(45deg); }
+}
+.animate-pulse {
+  animation: pulse 2.6s ease-in-out infinite;
+}
