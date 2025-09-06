@@ -1,9 +1,5 @@
-import React, { createContext, useState, ReactNode, useEffect } from "react";
+import React, { createContext, useState, ReactNode } from "react";
 import { ConfigProvider } from "antd";
-import {
-  getLocalStoragedata,
-  setLocalStorageData,
-} from "../helpers/Storage";
 import { getCurrentTime } from "../helpers/Time";
 
 export interface Message {
@@ -11,9 +7,8 @@ export interface Message {
   text: string;
   time: string;
 }
+
 interface AuthContextType {
-  token: string | null;
-  setToken: (token: string | null) => void;
   sessionID: string;
   setSessionID: (id: string) => void;
   messages: Message[];
@@ -25,8 +20,6 @@ interface AuthContextType {
 }
 
 export const AuthContext = createContext<AuthContextType>({
-  token: null,
-  setToken: () => {},
   sessionID: "",
   setSessionID: () => {},
   messages: [],
@@ -42,12 +35,6 @@ interface AuthProviderProps {
 }
 
 export function AuthContextProvider({ children }: AuthProviderProps) {
-  const urlParams = new URLSearchParams(window.location.search);
-  const tokenFromURL = urlParams.get("token");
-  const storedToken = getLocalStoragedata("token");
-  const initialToken = tokenFromURL || storedToken;
-
-  const [token, setToken] = useState<string | null>(initialToken);
   const [sessionID, setSessionID] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -59,19 +46,9 @@ export function AuthContextProvider({ children }: AuthProviderProps) {
   const [chatHistory, setChatHistory] = useState<Message[]>([]);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
 
-  useEffect(() => {
-    if (tokenFromURL) {
-      setLocalStorageData("token", tokenFromURL);
-      const cleanURL = window.location.origin + window.location.pathname;
-      window.history.replaceState({}, document.title, cleanURL);
-    }
-  }, [tokenFromURL]);
-
   return (
     <AuthContext.Provider
       value={{
-        token,
-        setToken,
         sessionID,
         setSessionID,
         messages,
