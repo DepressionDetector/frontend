@@ -29,6 +29,12 @@ const levelColor = (lvl?: string) => {
       return "default";
   }
 };
+const defaultMessage: Message = {
+  sender: "popo",
+  text: "Hello. How may I assist you today?",
+  time: getCurrentTime(),
+};
+
 
 const Chatbox = () => {
   const [input, setInput] = useState("");
@@ -271,9 +277,30 @@ const Chatbox = () => {
           <div className="rounded-3xl p-4 bg-white/55 neo-out">
             <h2 className="font-medium mb-3">Session Controls</h2>
             <div className="flex flex-col gap-3">
-              <button className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition">
-                ➕ New Chat
-              </button>
+             <button
+  onClick={async () => {
+    // Reset messages to default
+    setMessages([defaultMessage]);
+    setChatHistory([]);
+    setAskedPhq9Ids([]);
+    setLastPhq9(null);
+    setIsPhq9(false);
+    setLevelResult(null);
+
+    // Create a new session
+    const newSession = await createNewSession();
+    setSessionID(newSession);
+
+    // Fetch summaries again
+    const allSummaries = await fetchAllSummaries();
+    setSessionSummaries(allSummaries);
+  }}
+  className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition"
+>
+  ➕ New Chat
+</button>
+
+
               <button
                 onClick={() => setMessages([])}
                 className="w-full rounded-2xl px-4 py-2 bg-red-200/80 text-red-800 font-medium neo-out text-sm hover:translate-y-[1px] transition"
