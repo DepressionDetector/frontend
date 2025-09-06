@@ -343,19 +343,19 @@ function MessageBubble({ message }: { message: Message }) {
       className={"flex w-full " + (isUser ? "justify-end" : "justify-start")}
     >
       <div
-        className={
-          "flex items-end gap-2 " + (isUser ? "flex-row-reverse" : "flex-row")
-        }
+        className={"flex items-end gap-2 " + (isUser ? "flex-row" : "flex-row")}
       >
         {!isUser && (
           <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
             <span className="text-sm">😊</span>
           </div>
         )}
+
         <div
           className={[
-            "max-w-[78%] px-5 py-3 rounded-3xl relative",
+            "px-5 py-3 rounded-3xl relative",
             "text-sm leading-relaxed",
+            "max-w-[75%] break-words",
             isUser
               ? "bg-[#9fdde2]/90 text-slate-700 bubble-tail-right neo-out"
               : "bg-white/90 text-slate-700 bubble-tail-left neo-in",
@@ -363,12 +363,17 @@ function MessageBubble({ message }: { message: Message }) {
         >
           <div className="flex items-start gap-2">
             <span className="flex-1 whitespace-pre-wrap">{message.text}</span>
-            {isUser && <span className="shrink-0 opacity-60">❤️</span>}
           </div>
           <div className="mt-1 text-[10px] opacity-60 text-right">
             {message.time}
           </div>
         </div>
+
+        {isUser && (
+          <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
+            <span className="text-sm">❤️</span>
+          </div>
+        )}
       </div>
     </div>
   );
