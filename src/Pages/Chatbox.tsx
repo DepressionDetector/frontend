@@ -317,16 +317,16 @@ const Chatbox = () => {
                     <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
                       <span className="text-sm">😊</span>
                     </div>
-          <div className="px-5 py-3 rounded-3xl bg-white/90 text-slate-700 text-sm max-w-[75%] neo-in flex items-center gap-2">
-  <span className="animate-think font-medium">Thinking</span>
-  <span className="dots flex gap-1">
-    <span className="dot animate-dot delay-0">.</span>
-    <span className="dot animate-dot delay-200">.</span>
-    <span className="dot animate-dot delay-400">.</span>
-  </span>
-</div>
-
-
+                    <div className="px-5 py-3 rounded-3xl bg-white/90 text-slate-700 text-sm max-w-[75%] neo-in flex items-center gap-2">
+                      <span className="animate-think font-medium">
+                        Thinking
+                      </span>
+                      <span className="dots flex gap-1">
+                        <span className="dot animate-dot delay-0">.</span>
+                        <span className="dot animate-dot delay-200">.</span>
+                        <span className="dot animate-dot delay-400">.</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
