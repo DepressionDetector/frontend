@@ -29,6 +29,12 @@ const levelColor = (lvl?: string) => {
       return "default";
   }
 };
+const defaultMessage: Message = {
+  sender: "popo",
+  text: "Hello. How may I assist you today?",
+  time: getCurrentTime(),
+};
+
 
 const Chatbox = () => {
   const [input, setInput] = useState("");
@@ -64,7 +70,7 @@ const Chatbox = () => {
       top: viewportRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages.length]);
+  }, [messages.length, loading]);
 
   const canSend = useMemo(() => input.trim().length > 0, [input]);
 
@@ -89,7 +95,7 @@ const Chatbox = () => {
     const updatedHistory = await fetchChatHistory(sessionID);
     const formattedHistory = Array.isArray(updatedHistory)
       ? updatedHistory.map((msg: any) => ({
-          sender: msg.sender === "bot" ? "popo" : "you",
+          sender: msg.sender,
           text: msg.message,
           time: getCurrentTime(),
         }))
@@ -106,7 +112,7 @@ const Chatbox = () => {
     );
 
     const finalBotMsg = {
-      sender: "popo",
+      sender: "bot",
       text: botReply.response,
       time: getCurrentTime(),
     };
@@ -271,9 +277,30 @@ const Chatbox = () => {
           <div className="rounded-3xl p-4 bg-white/55 neo-out">
             <h2 className="font-medium mb-3">Session Controls</h2>
             <div className="flex flex-col gap-3">
-              <button className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition">
-                ➕ New Chat
-              </button>
+             <button
+  onClick={async () => {
+    // Reset messages to default
+    setMessages([defaultMessage]);
+    setChatHistory([]);
+    setAskedPhq9Ids([]);
+    setLastPhq9(null);
+    setIsPhq9(false);
+    setLevelResult(null);
+
+    // Create a new session
+    const newSession = await createNewSession();
+    setSessionID(newSession);
+
+    // Fetch summaries again
+    const allSummaries = await fetchAllSummaries();
+    setSessionSummaries(allSummaries);
+  }}
+  className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition"
+>
+  ➕ New Chat
+</button>
+
+
               <button
                 onClick={() => setMessages([])}
                 className="w-full rounded-2xl px-4 py-2 bg-red-200/80 text-red-800 font-medium neo-out text-sm hover:translate-y-[1px] transition"
@@ -309,6 +336,27 @@ const Chatbox = () => {
               {messages.map((m) => (
                 <MessageBubble key={m.time + m.text} message={m} />
               ))}
+
+              {/* Thinking indicator */}
+              {loading && (
+                <div className="flex w-full justify-start">
+                  <div className="flex items-end gap-2 flex-row">
+                    <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
+                      <span className="text-sm">😊</span>
+                    </div>
+                    <div className="px-5 py-3 rounded-3xl bg-white/90 text-slate-700 text-sm max-w-[75%] neo-in flex items-center gap-2">
+                      <span className="animate-think font-medium">
+                        Thinking
+                      </span>
+                      <span className="dots flex gap-1">
+                        <span className="dot animate-dot delay-0">.</span>
+                        <span className="dot animate-dot delay-200">.</span>
+                        <span className="dot animate-dot delay-400">.</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-3 border-t border-white/60">
@@ -343,19 +391,19 @@ function MessageBubble({ message }: { message: Message }) {
       className={"flex w-full " + (isUser ? "justify-end" : "justify-start")}
     >
       <div
-        className={
-          "flex items-end gap-2 " + (isUser ? "flex-row-reverse" : "flex-row")
-        }
+        className={"flex items-end gap-2 " + (isUser ? "flex-row" : "flex-row")}
       >
         {!isUser && (
           <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
             <span className="text-sm">😊</span>
           </div>
         )}
+
         <div
           className={[
-            "max-w-[78%] px-5 py-3 rounded-3xl relative",
+            "px-5 py-3 rounded-3xl relative",
             "text-sm leading-relaxed",
+            "max-w-[75%] break-words",
             isUser
               ? "bg-[#9fdde2]/90 text-slate-700 bubble-tail-right neo-out"
               : "bg-white/90 text-slate-700 bubble-tail-left neo-in",
@@ -363,12 +411,17 @@ function MessageBubble({ message }: { message: Message }) {
         >
           <div className="flex items-start gap-2">
             <span className="flex-1 whitespace-pre-wrap">{message.text}</span>
-            {isUser && <span className="shrink-0 opacity-60">❤️</span>}
           </div>
           <div className="mt-1 text-[10px] opacity-60 text-right">
             {message.time}
           </div>
         </div>
+
+        {isUser && (
+          <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
+            <span className="text-sm">❤️</span>
+          </div>
+        )}
       </div>
     </div>
   );
