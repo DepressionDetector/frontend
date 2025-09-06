@@ -1,35 +1,63 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import bgImage from "../Assets/bgI.png";
+import {
+  ClassifierResult,
+  getClassifierResult,
+  getDepressionLevel,
+} from "../services/DetectionService";
+import { AuthContext, Message } from "../context/AuthContext";
+import {
+  createNewSession,
+  fetchAllSummaries,
+  fetchChatHistory,
+  saveMessage,
+} from "../services/ChatMessageService";
+import { getCurrentTime } from "../helpers/Time";
+import { savePHQ9Answer } from "../services/Phq9Service";
+import { chatBotService } from "../services/ChatBotService";
+import { saveClassifierToServer } from "../services/ClassifierResults";
 
-type Message = {
-  id: string;
-  role: "assistant" | "user";
-  text: string;
-  time: string;
+const levelColor = (lvl?: string) => {
+  switch ((lvl || "").toLowerCase()) {
+    case "minimal":
+      return "green";
+    case "moderate":
+      return "gold";
+    case "severe":
+      return "red";
+    default:
+      return "default";
+  }
 };
 
-const formatTime = () =>
-  new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-const sample: Message[] = [
-  {
-    id: crypto.randomUUID(),
-    role: "assistant",
-    text: "Hi, I’m here to listen. How are you feeling today?",
-    time: formatTime(),
-  },
-  {
-    id: crypto.randomUUID(),
-    role: "user",
-    text: "A bit anxious. Just want a calm space to talk.",
-    time: formatTime(),
-  },
-];
-
 const Chatbox = () => {
-  const [messages, setMessages] = useState<Message[]>(sample);
   const [input, setInput] = useState("");
   const viewportRef = useRef<HTMLDivElement>(null);
+  const { sessionID, setSessionID, setMessages, setChatHistory, messages } =
+    useContext(AuthContext);
+  const [sessionSummaries, setSessionSummaries] = useState<string[]>([]);
+  const [classifier, setClassifier] = useState<ClassifierResult | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [lastPhq9, setLastPhq9] = useState<{
+    id: number;
+    question: string;
+  } | null>(null);
+  const [askedPhq9Ids, setAskedPhq9Ids] = useState<number[]>([]);
+  const [isPhq9, setIsPhq9] = useState(false);
+  const [levelResult, setLevelResult] = useState<any>(null);
+  const [levelOpen, setLevelOpen] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const session = await createNewSession();
+      setSessionID(session);
+
+      const allSummaries = await fetchAllSummaries();
+      setSessionSummaries(allSummaries);
+    })();
+  }, []);
 
   useEffect(() => {
     viewportRef.current?.scrollTo({
@@ -40,27 +68,161 @@ const Chatbox = () => {
 
   const canSend = useMemo(() => input.trim().length > 0, [input]);
 
-  const send = () => {
+  const send = async () => {
     if (!canSend) return;
     const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: "user",
+      sender: "user",
       text: input.trim(),
-      time: formatTime(),
+      time: getCurrentTime(),
     };
-    setMessages((m) => [...m, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setLoading(true);
+    await saveMessage(input, sessionID, "user");
 
-    setTimeout(() => {
-      const reply: Message = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        text: "Thanks for sharing. What seems to be triggering the anxiety today?",
-        time: formatTime(),
-      };
-      setMessages((m) => [...m, reply]);
-    }, 650);
+    if (lastPhq9) {
+      await savePHQ9Answer(sessionID, lastPhq9.id, lastPhq9.question, input);
+      setLastPhq9(null);
+      setIsPhq9(false);
+    }
+
+    const updatedHistory = await fetchChatHistory(sessionID);
+    const formattedHistory = Array.isArray(updatedHistory)
+      ? updatedHistory.map((msg: any) => ({
+          sender: msg.sender === "bot" ? "popo" : "you",
+          text: msg.message,
+          time: getCurrentTime(),
+        }))
+      : [];
+
+    const context = formattedHistory
+      .map((m) => `${m.sender}: ${m.text}`)
+      .join("\n");
+    const botReply = await chatBotService(
+      context,
+      inputValue,
+      sessionSummaries,
+      askedPhq9Ids
+    );
+
+    const finalBotMsg = {
+      sender: "popo",
+      text: botReply.response,
+      time: getCurrentTime(),
+    };
+
+    if (
+      typeof botReply.phq9_questionID === "number" &&
+      typeof botReply.phq9_question === "string"
+    ) {
+      const questionID = botReply.phq9_questionID as number;
+      const question = botReply.phq9_question as string;
+
+      setAskedPhq9Ids((prev) => [...prev, questionID]);
+      setLastPhq9({ id: questionID, question });
+      setIsPhq9(true);
+    }
+
+    await saveMessage(finalBotMsg.text, sessionID, "bot");
+
+    const finalMessages = [...formattedHistory, finalBotMsg];
+    setMessages(finalMessages);
+    setChatHistory(finalMessages);
+    setLoading(false);
   };
+
+  const handlePhqAnswer = async (answer: string) => {
+    if (!lastPhq9) return;
+    setIsPhq9(false);
+    setLoading(true);
+
+    await savePHQ9Answer(sessionID, lastPhq9.id, lastPhq9.question, answer);
+    setLastPhq9(null);
+
+    await saveMessage(answer, sessionID, "user");
+
+    const updatedHistory = await fetchChatHistory(sessionID);
+    const formattedHistory = Array.isArray(updatedHistory)
+      ? updatedHistory.map((msg: any) => ({
+          sender: msg.sender === "bot" ? "popo" : "you",
+          text: msg.message,
+          time: getCurrentTime(),
+        }))
+      : [];
+
+    const context = formattedHistory
+      .map((m) => `${m.sender}: ${m.text}`)
+      .join("\n");
+
+    const botReply = await chatBotService(
+      context,
+      answer,
+      sessionSummaries,
+      askedPhq9Ids
+    );
+    const finalBotMsg = {
+      sender: "popo",
+      text: botReply.response,
+      time: getCurrentTime(),
+    };
+
+    if (
+      typeof botReply.phq9_questionID === "number" &&
+      typeof botReply.phq9_question === "string"
+    ) {
+      const questionID = botReply.phq9_questionID as number;
+      const question = botReply.phq9_question as string;
+
+      setAskedPhq9Ids((prev) => [...prev, questionID]);
+      setLastPhq9({ id: questionID, question });
+      setIsPhq9(true);
+    }
+
+    await saveMessage(finalBotMsg.text, sessionID, "bot");
+
+    const finalMessages = [...formattedHistory, finalBotMsg];
+    setMessages(finalMessages);
+    setChatHistory(finalMessages);
+    setLoading(false);
+  };
+
+  async function ClassifierResult() {
+    if (!sessionID) return;
+    setDetecting(true);
+    try {
+      const updatedHistory = await fetchChatHistory(sessionID);
+      const formattedHistory: string[] = Array.isArray(updatedHistory)
+        ? updatedHistory.map(
+            (msg: any) =>
+              `${msg.sender === "bot" ? "popo" : "you"}: ${msg.message}`
+          )
+        : [];
+
+      const historyStr = formattedHistory.join("\n").trim();
+      if (!historyStr) return;
+
+      const res = await getClassifierResult(historyStr, sessionSummaries ?? []);
+      setClassifier(res);
+
+      await saveClassifierToServer(Number(sessionID), res);
+    } catch (e) {
+      console.error("getClassifierResult failed:", e);
+    } finally {
+      setDetecting(false);
+    }
+  }
+
+  async function runLevelDetection() {
+    try {
+      await ClassifierResult();
+      const resp = await getDepressionLevel();
+      if (!resp?.success) throw new Error("level API failed");
+      setLevelResult(resp.data);
+      setLevelOpen(true);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -109,10 +271,7 @@ const Chatbox = () => {
           <div className="rounded-3xl p-4 bg-white/55 neo-out">
             <h2 className="font-medium mb-3">Session Controls</h2>
             <div className="flex flex-col gap-3">
-              <button
-                onClick={() => setMessages(sample)}
-                className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition"
-              >
+              <button className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition">
                 ➕ New Chat
               </button>
               <button
@@ -148,7 +307,7 @@ const Chatbox = () => {
               className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
             >
               {messages.map((m) => (
-                <MessageBubble key={m.id} message={m} />
+                <MessageBubble key={m.time + m.text} message={m} />
               ))}
             </div>
 
@@ -178,9 +337,11 @@ const Chatbox = () => {
 };
 
 function MessageBubble({ message }: { message: Message }) {
-  const isUser = message.role === "user";
+  const isUser = message.sender === "user";
   return (
-    <div className={"flex w-full " + (isUser ? "justify-end" : "justify-start")}>
+    <div
+      className={"flex w-full " + (isUser ? "justify-end" : "justify-start")}
+    >
       <div
         className={
           "flex items-end gap-2 " + (isUser ? "flex-row-reverse" : "flex-row")
@@ -202,7 +363,6 @@ function MessageBubble({ message }: { message: Message }) {
         >
           <div className="flex items-start gap-2">
             <span className="flex-1 whitespace-pre-wrap">{message.text}</span>
-            {/* show ❤️ only for user messages */}
             {isUser && <span className="shrink-0 opacity-60">❤️</span>}
           </div>
           <div className="mt-1 text-[10px] opacity-60 text-right">
