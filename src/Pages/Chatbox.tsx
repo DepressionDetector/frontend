@@ -89,7 +89,7 @@ const Chatbox = () => {
     const updatedHistory = await fetchChatHistory(sessionID);
     const formattedHistory = Array.isArray(updatedHistory)
       ? updatedHistory.map((msg: any) => ({
-          sender: msg.sender === "bot" ? "popo" : "you",
+          sender: msg.sender,
           text: msg.message,
           time: getCurrentTime(),
         }))
@@ -106,7 +106,7 @@ const Chatbox = () => {
     );
 
     const finalBotMsg = {
-      sender: "popo",
+      sender: "bot",
       text: botReply.response,
       time: getCurrentTime(),
     };
