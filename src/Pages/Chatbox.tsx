@@ -17,8 +17,6 @@ import { savePHQ9Answer } from "../services/Phq9Service";
 import { chatBotService } from "../services/ChatBotService";
 import { saveClassifierToServer } from "../services/ClassifierResults";
 
-
-
 const levelColor = (lvl?: string) => {
   switch ((lvl || "").toLowerCase()) {
     case "minimal":
@@ -48,8 +46,9 @@ const Chatbox = () => {
   } | null>(null);
   const [askedPhq9Ids, setAskedPhq9Ids] = useState<number[]>([]);
   const [isPhq9, setIsPhq9] = useState(false);
-const [levelResult, setLevelResult] = useState<any>(null);
-  const [levelOpen, setLevelOpen] = useState(false); 
+  const [levelResult, setLevelResult] = useState<any>(null);
+  const [levelOpen, setLevelOpen] = useState(false);
+
   useEffect(() => {
     (async () => {
       const session = await createNewSession();
@@ -84,7 +83,9 @@ const [levelResult, setLevelResult] = useState<any>(null);
     if (lastPhq9) {
       await savePHQ9Answer(sessionID, lastPhq9.id, lastPhq9.question, input);
       setLastPhq9(null);
+      setIsPhq9(false);
     }
+
     const updatedHistory = await fetchChatHistory(sessionID);
     const formattedHistory = Array.isArray(updatedHistory)
       ? updatedHistory.map((msg: any) => ({
@@ -103,6 +104,7 @@ const [levelResult, setLevelResult] = useState<any>(null);
       sessionSummaries,
       askedPhq9Ids
     );
+
     const finalBotMsg = {
       sender: "popo",
       text: botReply.response,
@@ -117,10 +119,7 @@ const [levelResult, setLevelResult] = useState<any>(null);
       const question = botReply.phq9_question as string;
 
       setAskedPhq9Ids((prev) => [...prev, questionID]);
-      setLastPhq9({
-        id: questionID,
-        question: question,
-      });
+      setLastPhq9({ id: questionID, question });
       setIsPhq9(true);
     }
 
@@ -133,21 +132,12 @@ const [levelResult, setLevelResult] = useState<any>(null);
   };
 
   const handlePhqAnswer = async (answer: string) => {
-    const answerMessage = {
-      sender: "you",
-      text: answer,
-      time: getCurrentTime(),
-    };
-
-/*     setMessages((prev: Message[]) => [...prev, answerMessage]);
- */    setIsPhq9(false); // disable chit buttons
+    if (!lastPhq9) return;
+    setIsPhq9(false);
     setLoading(true);
 
-    // Save PHQ9 answer
-    if (lastPhq9) {
-      await savePHQ9Answer(sessionID, lastPhq9.id, lastPhq9.question, answer);
-      setLastPhq9(null); // clear current PHQ9 question
-    }
+    await savePHQ9Answer(sessionID, lastPhq9.id, lastPhq9.question, answer);
+    setLastPhq9(null);
 
     await saveMessage(answer, sessionID, "user");
 
@@ -170,7 +160,6 @@ const [levelResult, setLevelResult] = useState<any>(null);
       sessionSummaries,
       askedPhq9Ids
     );
-
     const finalBotMsg = {
       sender: "popo",
       text: botReply.response,
@@ -185,7 +174,7 @@ const [levelResult, setLevelResult] = useState<any>(null);
       const question = botReply.phq9_question as string;
 
       setAskedPhq9Ids((prev) => [...prev, questionID]);
-      setLastPhq9({ id: questionID, question: question });
+      setLastPhq9({ id: questionID, question });
       setIsPhq9(true);
     }
 
@@ -198,7 +187,7 @@ const [levelResult, setLevelResult] = useState<any>(null);
   };
 
   async function ClassifierResult() {
-    if (!sessionID) return; // session not ready yet
+    if (!sessionID) return;
     setDetecting(true);
     try {
       const updatedHistory = await fetchChatHistory(sessionID);
@@ -210,23 +199,12 @@ const [levelResult, setLevelResult] = useState<any>(null);
         : [];
 
       const historyStr = formattedHistory.join("\n").trim();
-      if (!historyStr) return; // nothing to classify yet
-
-      const latestSummary: string | null =
-        sessionSummaries && sessionSummaries.length
-          ? sessionSummaries[sessionSummaries.length - 1]
-          : null;
+      if (!historyStr) return;
 
       const res = await getClassifierResult(historyStr, sessionSummaries ?? []);
       setClassifier(res);
 
-      console.log("Classifier:", res);
-      try {
-        await saveClassifierToServer(Number(sessionID), res);
-        console.log("Classifier result saved.");
-      } catch (err) {
-        console.error("Failed to persist classifier result:", err);
-      }
+      await saveClassifierToServer(Number(sessionID), res);
     } catch (e) {
       console.error("getClassifierResult failed:", e);
     } finally {
@@ -235,26 +213,17 @@ const [levelResult, setLevelResult] = useState<any>(null);
   }
 
   async function runLevelDetection() {
-  try {
-    // 1) run your existing LLM classifier and persist it
-    await ClassifierResult();
-
-    // 2) compute composite index by userID (backend uses token->userID)
-    const resp = await getDepressionLevel();
-    if (!resp?.success) throw new Error("level API failed");
-    console.log("Depression Level Response:", resp);
-    setLevelResult(resp.data);
-setLevelOpen(true); // open modal to show results
-  } catch (e) {
-    console.error(e);
+    try {
+      await ClassifierResult();
+      const resp = await getDepressionLevel();
+      if (!resp?.success) throw new Error("level API failed");
+      setLevelResult(resp.data);
+      setLevelOpen(true);
+    } catch (e) {
+      console.error(e);
+    }
   }
-}
- const phqOptions = [
-    "Not at all",
-    "Several days",
-    "More than half the days",
-    "Nearly every day",
-  ];
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -302,10 +271,7 @@ setLevelOpen(true); // open modal to show results
           <div className="rounded-3xl p-4 bg-white/55 neo-out">
             <h2 className="font-medium mb-3">Session Controls</h2>
             <div className="flex flex-col gap-3">
-              <button
-                /*                 onClick={() => setMessages(sample)}
-                 */ className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition"
-              >
+              <button className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition">
                 ➕ New Chat
               </button>
               <button
@@ -341,8 +307,8 @@ setLevelOpen(true); // open modal to show results
               className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
             >
               {messages.map((m) => (
-                <MessageBubble message={m} />
-              ))} 
+                <MessageBubble key={m.time + m.text} message={m} />
+              ))}
             </div>
 
             <div className="p-3 border-t border-white/60">
@@ -373,7 +339,6 @@ setLevelOpen(true); // open modal to show results
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.sender === "user";
   return (
-
     <div
       className={"flex w-full " + (isUser ? "justify-end" : "justify-start")}
     >
@@ -398,7 +363,6 @@ function MessageBubble({ message }: { message: Message }) {
         >
           <div className="flex items-start gap-2">
             <span className="flex-1 whitespace-pre-wrap">{message.text}</span>
-            {/* show ❤️ only for user messages */}
             {isUser && <span className="shrink-0 opacity-60">❤️</span>}
           </div>
           <div className="mt-1 text-[10px] opacity-60 text-right">
