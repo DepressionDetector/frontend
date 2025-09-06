@@ -64,7 +64,7 @@ const Chatbox = () => {
       top: viewportRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages.length]);
+  }, [messages.length, loading]);
 
   const canSend = useMemo(() => input.trim().length > 0, [input]);
 
@@ -309,6 +309,27 @@ const Chatbox = () => {
               {messages.map((m) => (
                 <MessageBubble key={m.time + m.text} message={m} />
               ))}
+
+              {/* Thinking indicator */}
+              {loading && (
+                <div className="flex w-full justify-start">
+                  <div className="flex items-end gap-2 flex-row">
+                    <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
+                      <span className="text-sm">😊</span>
+                    </div>
+          <div className="px-5 py-3 rounded-3xl bg-white/90 text-slate-700 text-sm max-w-[75%] neo-in flex items-center gap-2">
+  <span className="animate-think font-medium">Thinking</span>
+  <span className="dots flex gap-1">
+    <span className="dot animate-dot delay-0">.</span>
+    <span className="dot animate-dot delay-200">.</span>
+    <span className="dot animate-dot delay-400">.</span>
+  </span>
+</div>
+
+
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-3 border-t border-white/60">
