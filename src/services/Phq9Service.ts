@@ -27,3 +27,21 @@ export async function savePHQ9Answer(
         return null;
     }
 }
+
+export async function fetchAllPHQ9Answers() {
+    const token = getLocalStoragedata("token");
+    try {
+        const res = await fetch(`${API_BASE}/phq9/phq9-all`, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+        });
+
+        return await res.json();
+    } catch (err) {
+        console.error("Error fetching PHQ-9 answers:", err);
+        return null;
+    }
+}

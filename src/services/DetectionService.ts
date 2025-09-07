@@ -1,25 +1,29 @@
 // services/DetectionService.ts
 import { getLocalStoragedata } from "../helpers/Storage";
-const metadataServiceURL = "http://localhost:8000/";
-export type EmotionLabel = "happy" | "neutral" | "sad" | "angry" | "fearful";
-export type DepressionDetectedLabel = "Depression Signs Detected" | "No Depression Signs Detected";
 
+const metadataServiceURL = "http://localhost:8000/";
+
+// NEW: align type with backend response
+export type PHQ9Level =
+    | "Minimal"
+    | "Mild"
+    | "Moderate"
+    | "Moderately Severe"
+    | "Severe";
 
 export interface ClassifierResult {
-    depression_label: DepressionDetectedLabel;
-    depression_confidence_detected: number;
-    emotion: EmotionLabel;
-    emotion_confidence: number;
-    rationale: string;
+    phq9_score: number;
+    level: PHQ9Level;
 }
+
+// Sends numbered strings: ["1. ...", "2. ...", ...]
 export async function getClassifierResult(
-    history: string,
-    summaries: string[]
+    phq9Answers: string[]
 ): Promise<ClassifierResult> {
     const res = await fetch(`${metadataServiceURL}detect`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history, summaries }),
+        body: JSON.stringify({ phq9Answers }),
     });
 
     if (!res.ok) {
@@ -30,6 +34,7 @@ export async function getClassifierResult(
 }
 
 
+// --- unchanged: other API ---
 const API_BASE = "http://localhost:8080";
 
 export async function getDepressionLevel() {

@@ -13,7 +13,7 @@ import {
   saveMessage,
 } from "../services/ChatMessageService";
 import { getCurrentTime } from "../helpers/Time";
-import { savePHQ9Answer } from "../services/Phq9Service";
+import { savePHQ9Answer , fetchAllPHQ9Answers} from "../services/Phq9Service";
 import { chatBotService } from "../services/ChatBotService";
 import { saveClassifierToServer } from "../services/ClassifierResults";
 
@@ -186,31 +186,47 @@ const Chatbox = () => {
     setLoading(false);
   };
 
-  async function ClassifierResult() {
-    if (!sessionID) return;
-    setDetecting(true);
-    try {
-      const updatedHistory = await fetchChatHistory(sessionID);
-      const formattedHistory: string[] = Array.isArray(updatedHistory)
-        ? updatedHistory.map(
-            (msg: any) =>
-              `${msg.sender === "bot" ? "popo" : "you"}: ${msg.message}`
-          )
-        : [];
+async function ClassifierResult() {
+  if (!sessionID) return;
+  setDetecting(true);
+  try {
+    const phq9Raw = await fetchAllPHQ9Answers();
+    console.log("Raw PHQ9 from DB:", phq9Raw);
 
-      const historyStr = formattedHistory.join("\n").trim();
-      if (!historyStr) return;
+    // Normalize to an array of records
+    const records: any[] =
+      Array.isArray(phq9Raw) ? phq9Raw :
+      Array.isArray(phq9Raw?.answers) ? phq9Raw.answers :
+      Array.isArray(phq9Raw?.data) ? phq9Raw.data :
+      Array.isArray(phq9Raw?.result) ? phq9Raw.result :
+      [];
 
-      const res = await getClassifierResult(historyStr, sessionSummaries ?? []);
-      setClassifier(res);
+    // Optional: sort by question ID (1..9) if present
+    records.sort((a, b) => Number(a.questionID ?? a.questionId ?? a.question_id ?? 0) -
+                           Number(b.questionID ?? b.questionId ?? b.question_id ?? 0));
 
-      await saveClassifierToServer(Number(sessionID), res);
-    } catch (e) {
-      console.error("getClassifierResult failed:", e);
-    } finally {
-      setDetecting(false);
-    }
+    // Build numbered strings: "1. <answer>"
+    const phq9Answers = records.map((item: any) => {
+      const qid =
+        Number(item.questionID ?? item.questionId ?? item.question_id ?? 0) || 0;
+      const ans = String(item.answer ?? "").trim();
+      return `${qid}. ${ans}`;
+    });
+
+    console.log("Mapped PHQ9 answers:", phq9Answers);
+
+    const res = await getClassifierResult(phq9Answers);
+    setClassifier(res);
+    console.log("Classifier Result:", res);
+
+    //await saveClassifierToServer(Number(sessionID), res);
+  } catch (e) {
+    console.error("getClassifierResult failed:", e);
+  } finally {
+    setDetecting(false);
   }
+}
+
 
   async function runLevelDetection() {
     try {
@@ -279,6 +295,12 @@ const Chatbox = () => {
                 className="w-full rounded-2xl px-4 py-2 bg-red-200/80 text-red-800 font-medium neo-out text-sm hover:translate-y-[1px] transition"
               >
                 ⏹ End Session
+              </button>
+              <button
+                onClick={() => ClassifierResult()}
+                className="w-full rounded-2xl px-4 py-2 bg-red-200/80 text-red-800 font-medium neo-out text-sm hover:translate-y-[1px] transition"
+              >
+                ⏹ Level Detection
               </button>
             </div>
             <div className="mt-4 text-xs text-slate-600/80">
