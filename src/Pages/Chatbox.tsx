@@ -3,6 +3,7 @@ import bgImage from "../Assets/bgI.png";
 import {
   ClassifierResult,
   getClassifierResult,
+  savePHQ9LevelResult,
   getDepressionLevel,
 } from "../services/DetectionService";
 import { AuthContext, Message } from "../context/AuthContext";
@@ -13,47 +14,59 @@ import {
   saveMessage,
 } from "../services/ChatMessageService";
 import { getCurrentTime } from "../helpers/Time";
-import { savePHQ9Answer , fetchAllPHQ9Answers} from "../services/Phq9Service";
+import { savePHQ9Answer, fetchAllPHQ9Answers } from "../services/Phq9Service";
 import { chatBotService } from "../services/ChatBotService";
-import { saveClassifierToServer } from "../services/ClassifierResults";
 
+/** badge colors for centered card */
 const levelColor = (lvl?: string) => {
   switch ((lvl || "").toLowerCase()) {
     case "minimal":
-      return "green";
+      return "bg-green-500";
+    case "mild":
+      return "bg-yellow-400";
     case "moderate":
-      return "gold";
+      return "bg-orange-400";
+    case "moderately severe":
+      return "bg-red-500";
     case "severe":
-      return "red";
+      return "bg-red-600";
     default:
-      return "default";
+      return "bg-slate-400";
   }
 };
-const defaultMessage: Message = {
-  sender: "popo",
-  text: "Hello. How may I assist you today?",
-  time: getCurrentTime(),
+const levelTextColor = (lvl?: string) => {
+  switch ((lvl || "").toLowerCase()) {
+    case "minimal":
+      return "text-green-700";
+    case "mild":
+      return "text-yellow-700";
+    case "moderate":
+      return "text-orange-700";
+    case "moderately severe":
+      return "text-red-700";
+    case "severe":
+      return "text-red-700";
+    default:
+      return "text-slate-600";
+  }
 };
-
 
 const Chatbox = () => {
   const [input, setInput] = useState("");
   const viewportRef = useRef<HTMLDivElement>(null);
   const { sessionID, setSessionID, setMessages, setChatHistory, messages } =
     useContext(AuthContext);
+
   const [sessionSummaries, setSessionSummaries] = useState<string[]>([]);
   const [classifier, setClassifier] = useState<ClassifierResult | null>(null);
   const [detecting, setDetecting] = useState(false);
-  const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(false);
-  const [lastPhq9, setLastPhq9] = useState<{
-    id: number;
-    question: string;
-  } | null>(null);
+  const [lastPhq9, setLastPhq9] = useState<{ id: number; question: string } | null>(null);
   const [askedPhq9Ids, setAskedPhq9Ids] = useState<number[]>([]);
   const [isPhq9, setIsPhq9] = useState(false);
-  const [levelResult, setLevelResult] = useState<any>(null);
-  const [levelOpen, setLevelOpen] = useState(false);
+  const [levelResult, setLevelResult] = useState<any>(null); // if you use getDepressionLevel
+  const [levelOpen, setLevelOpen] = useState(false);         // if you use getDepressionLevel modal
+  const [showLevelCard, setShowLevelCard] = useState(false); // CENTERED CARD VISIBILITY
 
   useEffect(() => {
     (async () => {
@@ -63,27 +76,28 @@ const Chatbox = () => {
       const allSummaries = await fetchAllSummaries();
       setSessionSummaries(allSummaries);
     })();
-  }, []);
+  }, [setSessionID]);
 
   useEffect(() => {
     viewportRef.current?.scrollTo({
       top: viewportRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages.length, loading]);
+  }, [messages.length]);
 
   const canSend = useMemo(() => input.trim().length > 0, [input]);
 
   const send = async () => {
     if (!canSend) return;
+
     const userMsg: Message = {
       sender: "user",
       text: input.trim(),
       time: getCurrentTime(),
     };
     setMessages((prev) => [...prev, userMsg]);
-    setInput("");
     setLoading(true);
+
     await saveMessage(input, sessionID, "user");
 
     if (lastPhq9) {
@@ -92,35 +106,29 @@ const Chatbox = () => {
       setIsPhq9(false);
     }
 
+    setInput("");
+
     const updatedHistory = await fetchChatHistory(sessionID);
     const formattedHistory = Array.isArray(updatedHistory)
       ? updatedHistory.map((msg: any) => ({
-          sender: msg.sender,
+          sender: msg.sender === "bot" ? "popo" : "you",
           text: msg.message,
           time: getCurrentTime(),
         }))
       : [];
 
-    const context = formattedHistory
-      .map((m) => `${m.sender}: ${m.text}`)
-      .join("\n");
-    const botReply = await chatBotService(
-      context,
-      inputValue,
-      sessionSummaries,
-      askedPhq9Ids
-    );
+    const context = formattedHistory.map((m) => `${m.sender}: ${m.text}`).join("\n");
 
-    const finalBotMsg = {
-      sender: "bot",
+    // use the *current* input you just sent
+    const botReply = await chatBotService(context, userMsg.text, sessionSummaries, askedPhq9Ids);
+
+    const finalBotMsg: Message = {
+      sender: "popo",
       text: botReply.response,
       time: getCurrentTime(),
     };
 
-    if (
-      typeof botReply.phq9_questionID === "number" &&
-      typeof botReply.phq9_question === "string"
-    ) {
+    if (typeof botReply.phq9_questionID === "number" && typeof botReply.phq9_question === "string") {
       const questionID = botReply.phq9_questionID as number;
       const question = botReply.phq9_question as string;
 
@@ -156,26 +164,16 @@ const Chatbox = () => {
         }))
       : [];
 
-    const context = formattedHistory
-      .map((m) => `${m.sender}: ${m.text}`)
-      .join("\n");
+    const context = formattedHistory.map((m) => `${m.sender}: ${m.text}`).join("\n");
 
-    const botReply = await chatBotService(
-      context,
-      answer,
-      sessionSummaries,
-      askedPhq9Ids
-    );
-    const finalBotMsg = {
+    const botReply = await chatBotService(context, answer, sessionSummaries, askedPhq9Ids);
+    const finalBotMsg: Message = {
       sender: "popo",
       text: botReply.response,
       time: getCurrentTime(),
     };
 
-    if (
-      typeof botReply.phq9_questionID === "number" &&
-      typeof botReply.phq9_question === "string"
-    ) {
+    if (typeof botReply.phq9_questionID === "number" && typeof botReply.phq9_question === "string") {
       const questionID = botReply.phq9_questionID as number;
       const question = botReply.phq9_question as string;
 
@@ -192,47 +190,48 @@ const Chatbox = () => {
     setLoading(false);
   };
 
-async function ClassifierResult() {
-  if (!sessionID) return;
-  setDetecting(true);
-  try {
-    const phq9Raw = await fetchAllPHQ9Answers();
-    console.log("Raw PHQ9 from DB:", phq9Raw);
+  async function ClassifierResult() {
+    if (!sessionID) return;
+    setDetecting(true);
+    try {
+      const phq9Raw = await fetchAllPHQ9Answers();
 
-    // Normalize to an array of records
-    const records: any[] =
-      Array.isArray(phq9Raw) ? phq9Raw :
-      Array.isArray(phq9Raw?.answers) ? phq9Raw.answers :
-      Array.isArray(phq9Raw?.data) ? phq9Raw.data :
-      Array.isArray(phq9Raw?.result) ? phq9Raw.result :
-      [];
+      // normalize to array
+      const records: any[] =
+        Array.isArray(phq9Raw) ? phq9Raw :
+        Array.isArray(phq9Raw?.answers) ? phq9Raw.answers :
+        Array.isArray(phq9Raw?.data) ? phq9Raw.data :
+        Array.isArray(phq9Raw?.result) ? phq9Raw.result :
+        [];
 
-    // Optional: sort by question ID (1..9) if present
-    records.sort((a, b) => Number(a.questionID ?? a.questionId ?? a.question_id ?? 0) -
-                           Number(b.questionID ?? b.questionId ?? b.question_id ?? 0));
+      // sort by question id
+      records.sort(
+        (a, b) =>
+          Number(a.questionID ?? a.questionId ?? a.question_id ?? 0) -
+          Number(b.questionID ?? b.questionId ?? b.question_id ?? 0)
+      );
 
-    // Build numbered strings: "1. <answer>"
-    const phq9Answers = records.map((item: any) => {
-      const qid =
-        Number(item.questionID ?? item.questionId ?? item.question_id ?? 0) || 0;
-      const ans = String(item.answer ?? "").trim();
-      return `${qid}. ${ans}`;
-    });
+      // numbered strings "1. <answer>"
+      const phq9Answers = records.map((item: any) => {
+        const qid = Number(item.questionID ?? item.questionId ?? item.question_id ?? 0) || 0;
+        const ans = String(item.answer ?? "").trim();
+        return `${qid}. ${ans}`;
+      });
 
-    console.log("Mapped PHQ9 answers:", phq9Answers);
+      const res = await getClassifierResult(phq9Answers);
+      setClassifier(res);
 
-    const res = await getClassifierResult(phq9Answers);
-    setClassifier(res);
-    console.log("Classifier Result:", res);
+      // persist (optional)
+      await savePHQ9LevelResult(Number(sessionID), res);
 
-    //await saveClassifierToServer(Number(sessionID), res);
-  } catch (e) {
-    console.error("getClassifierResult failed:", e);
-  } finally {
-    setDetecting(false);
+      // open the CENTERED CARD
+      setShowLevelCard(true);
+    } catch (e) {
+      console.error("getClassifierResult failed:", e);
+    } finally {
+      setDetecting(false);
+    }
   }
-}
-
 
   async function runLevelDetection() {
     try {
@@ -277,13 +276,9 @@ async function ClassifierResult() {
             <div className="h-9 w-9 rounded-2xl bg-white/70 neo-in flex items-center justify-center">
               💬
             </div>
-            <h1 className="text-base font-semibold text-slate-700/90">
-              CalmChatbox
-            </h1>
+            <h1 className="text-base font-semibold text-slate-700/90">CalmChatbox</h1>
           </div>
-          <div className="text-xs text-slate-600/70">
-            supportive • private • gentle
-          </div>
+          <div className="text-xs text-slate-600/70">supportive • private • gentle</div>
         </div>
       </header>
 
@@ -293,42 +288,23 @@ async function ClassifierResult() {
           <div className="rounded-3xl p-4 bg-white/55 neo-out">
             <h2 className="font-medium mb-3">Session Controls</h2>
             <div className="flex flex-col gap-3">
-             <button
-  onClick={async () => {
-    // Reset messages to default
-    setMessages([defaultMessage]);
-    setChatHistory([]);
-    setAskedPhq9Ids([]);
-    setLastPhq9(null);
-    setIsPhq9(false);
-    setLevelResult(null);
-
-    // Create a new session
-    const newSession = await createNewSession();
-    setSessionID(newSession);
-
-    // Fetch summaries again
-    const allSummaries = await fetchAllSummaries();
-    setSessionSummaries(allSummaries);
-  }}
-  className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition"
->
-  ➕ New Chat
-</button>
-
-
+              <button className="w-full rounded-2xl px-4 py-2 bg-white/80 neo-in text-sm font-medium hover:translate-y-[1px] transition">
+                ➕ New Chat
+              </button>
+               <button
+                onClick={() => ClassifierResult()}
+                disabled={detecting}
+                className="w-full rounded-2xl px-4 py-2 bg-red-200/80 text-red-800 font-medium neo-out text-sm hover:translate-y-[1px] transition disabled:opacity-60"
+              >
+                ⏹ Level Detection
+              </button>
               <button
                 onClick={() => setMessages([])}
                 className="w-full rounded-2xl px-4 py-2 bg-red-200/80 text-red-800 font-medium neo-out text-sm hover:translate-y-[1px] transition"
               >
                 ⏹ End Session
               </button>
-              <button
-                onClick={() => ClassifierResult()}
-                className="w-full rounded-2xl px-4 py-2 bg-red-200/80 text-red-800 font-medium neo-out text-sm hover:translate-y-[1px] transition"
-              >
-                ⏹ Level Detection
-              </button>
+             
             </div>
             <div className="mt-4 text-xs text-slate-600/80">
               You can start fresh anytime or end your session when done.
@@ -340,45 +316,17 @@ async function ClassifierResult() {
         <section className="lg:col-span-8 order-1 lg:order-2">
           <div className="rounded-3xl bg-white/55 neo-out flex flex-col h-[78vh]">
             <div className="px-4 py-3 border-b border-white/60 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full neo-in bg-white/90 flex items-center justify-center">
-                🫶
-              </div>
+              <div className="h-10 w-10 rounded-full neo-in bg-white/90 flex items-center justify-center">🫶</div>
               <div>
                 <div className="font-semibold">Tellme</div>
-                <div className="text-xs text-slate-600/80">
-                  Compassionate AI listener
-                </div>
+                <div className="text-xs text-slate-600/80">Compassionate AI listener</div>
               </div>
             </div>
 
-            <div
-              ref={viewportRef}
-              className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-            >
+            <div ref={viewportRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
               {messages.map((m) => (
                 <MessageBubble key={m.time + m.text} message={m} />
               ))}
-
-              {/* Thinking indicator */}
-              {loading && (
-                <div className="flex w-full justify-start">
-                  <div className="flex items-end gap-2 flex-row">
-                    <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
-                      <span className="text-sm">😊</span>
-                    </div>
-                    <div className="px-5 py-3 rounded-3xl bg-white/90 text-slate-700 text-sm max-w-[75%] neo-in flex items-center gap-2">
-                      <span className="animate-think font-medium">
-                        Thinking
-                      </span>
-                      <span className="dots flex gap-1">
-                        <span className="dot animate-dot delay-0">.</span>
-                        <span className="dot animate-dot delay-200">.</span>
-                        <span className="dot animate-dot delay-400">.</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="p-3 border-t border-white/60">
@@ -402,6 +350,63 @@ async function ClassifierResult() {
           </div>
         </section>
       </main>
+
+      {/* CENTERED OVERLAY CARD */}
+      {showLevelCard && classifier && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setShowLevelCard(false)} // click backdrop to close
+        >
+          <div
+            className="w-full max-w-md rounded-3xl p-6 bg-white/95 neo-in shadow-lg"
+            onClick={(e) => e.stopPropagation()} // prevent close when clicking card
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Depression Level</div>
+              <button
+                onClick={() => setShowLevelCard(false)}
+                className="text-xs opacity-60 hover:opacity-100"
+                aria-label="Close level card"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 justify-center">
+              <span className={`text-2xl font-bold ${levelTextColor(classifier.level)}`}>
+                {classifier.level}
+              </span>
+              <span className={`inline-block h-3 w-3 rounded-full ${levelColor(classifier.level)}`} />
+            </div>
+
+            <div className="mt-3 text-center text-sm">
+              PHQ-9 Score:&nbsp;
+              <span className="font-semibold">{classifier.phq9_score}</span>
+              <span className="opacity-60"> / 27</span>
+            </div>
+
+            <div className="mt-4 h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+              <div
+                className={`h-full ${levelColor(classifier.level)}`}
+                style={{ width: `${Math.max(0, Math.min(100, (classifier.phq9_score / 27) * 100))}%` }}
+              />
+            </div>
+
+            <div className="mt-4 text-center">
+              <button
+                onClick={() => setShowLevelCard(false)}
+                className="rounded-full px-6 py-2 text-sm font-semibold
+               bg-gradient-to-r from-pink-300 via-red-300 to-orange-300
+               text-white shadow-lg hover:shadow-xl hover:scale-105
+               transition-all duration-200"
+  >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -409,41 +414,26 @@ async function ClassifierResult() {
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.sender === "user";
   return (
-    <div
-      className={"flex w-full " + (isUser ? "justify-end" : "justify-start")}
-    >
-      <div
-        className={"flex items-end gap-2 " + (isUser ? "flex-row" : "flex-row")}
-      >
+    <div className={"flex w-full " + (isUser ? "justify-end" : "justify-start")}>
+      <div className={"flex items-end gap-2 " + (isUser ? "flex-row-reverse" : "flex-row")}>
         {!isUser && (
           <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
             <span className="text-sm">😊</span>
           </div>
         )}
-
         <div
           className={[
-            "px-5 py-3 rounded-3xl relative",
+            "max-w-[78%] px-5 py-3 rounded-3xl relative",
             "text-sm leading-relaxed",
-            "max-w-[75%] break-words",
-            isUser
-              ? "bg-[#9fdde2]/90 text-slate-700 bubble-tail-right neo-out"
-              : "bg-white/90 text-slate-700 bubble-tail-left neo-in",
+            isUser ? "bg-[#9fdde2]/90 text-slate-700 bubble-tail-right neo-out" : "bg-white/90 text-slate-700 bubble-tail-left neo-in",
           ].join(" ")}
         >
           <div className="flex items-start gap-2">
             <span className="flex-1 whitespace-pre-wrap">{message.text}</span>
+            {isUser && <span className="shrink-0 opacity-60">❤️</span>}
           </div>
-          <div className="mt-1 text-[10px] opacity-60 text-right">
-            {message.time}
-          </div>
+          <div className="mt-1 text-[10px] opacity-60 text-right">{message.time}</div>
         </div>
-
-        {isUser && (
-          <div className="h-9 w-9 rounded-full bg-white/90 neo-in flex items-center justify-center overflow-hidden">
-            <span className="text-sm">❤️</span>
-          </div>
-        )}
       </div>
     </div>
   );
