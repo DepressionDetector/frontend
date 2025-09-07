@@ -39,7 +39,7 @@ export function AuthContextProvider({ children }: AuthProviderProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "popo",
-      text: "Hi there. How are you feeling today?",
+      text: "Hello. How may I assist you today?",
       time: getCurrentTime(),
     },
   ]);
