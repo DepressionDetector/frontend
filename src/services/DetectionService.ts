@@ -2,6 +2,7 @@
 import { getLocalStoragedata } from "../helpers/Storage";
 
 const metadataServiceURL = "http://localhost:8000/";
+const apiBase = "http://localhost:8080";
 
 // NEW: align type with backend response
 export type PHQ9Level =
@@ -33,6 +34,32 @@ export async function getClassifierResult(
     return res.json();
 }
 
+export interface SaveLevelResponse { success: boolean; id?: string; error?: string; }
+
+export async function savePHQ9LevelResult(
+    sessionID: number,
+    result: { phq9_score: number; level: PHQ9Level }
+): Promise<SaveLevelResponse> {
+    const token = getLocalStoragedata("token"); // optional; endpoint doesn't require userID
+    const res = await fetch(`${apiBase}/classifier/level/save`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+            sessionID,
+            phq9_score: result.phq9_score,
+            level: result.level,
+        }),
+    });
+
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Save failed with ${res.status}`);
+    }
+    return res.json();
+}
 
 // --- unchanged: other API ---
 const API_BASE = "http://localhost:8080";
